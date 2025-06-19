@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Audio Crossfade Pro</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+      transition: background 0.3s, color 0.3s;
+      background: #fff;
+      color: #000;
+    }
+    body.dark {
+      background: #111;
+      color: #eee;
+    }
+    input, select, button {
+      margin: 0.5em;
+      padding: 0.4em;
+    }
+    .note {
+      margin-top: 2em;
+      font-style: italic;
+      color: gray;
+    }
+    .toggle {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+    #waveform {
+      width: 90%;
+      margin: 1em auto;
+    }
+  </style>
+  <script src="https://unpkg.com/wavesurfer.js"></script>
+</head>
+<body>
+  <button class="toggle">Toggle Dark Mode</button>
+
+  <h2>Audio Player with Crossfade</h2>
+  <input type="file" accept="audio/*" id="fileInput" multiple><br>
+  <select id="trackList"></select><br>
+
+  <button id="playBtn">Play</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="saveBtn">💾 Save Playlist</button>
+  <button id="loadBtn">📂 Load Playlist</button><br>
+
+  <label>Crossfade Duration (sec):
+    <input type="number" id="fadeDuration" value="2" min="0" step="0.1">
+  </label>
+
+  <div id="waveform"></div>
+
+  <div class="note">
+    How it works: When you press the play/pause button, it will fade in or out the audio based on the duration you set.
+  </div>
+
+  <script>
+    let audio = new Audio();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let src, gain;
+    let files = [];
+
+    const waveform = WaveSurfer.create({
+      container: '#waveform',
+      waveColor: '#999',
+      progressColor: '#2e86de',
+      height: 80
+    });
+
+    // Dark mode
+    const body = document.body;
+    if (localStorage.getItem('darkMode') === 'true') body.classList.add('dark');
+    document.querySelector('.toggle').addEventListener('click', () => {
+      const isDark = body.classList.toggle('dark');
+      localStorage.setItem('darkMode', isDark);
+    });
+
+    // Fade duration memory
+    const fadeInput = document.getElementById('fadeDuration');
+    const savedFade = localStorage.getItem('fadeDuration');
+    if (savedFade) fadeInput.value = savedFade;
+    fadeInput.addEventListener('change', () => {
+      localStorage.setItem('fadeDuration', fadeInput.value);
+    });
+
+    // File upload and track list
+    document.getElementById('fileInput').addEventListener('change', e => {
+      files = Array.from(e.target.files);
+      const select = document.getElementById('trackList');
+      select.innerHTML = '';
+      files.forEach((f, i) => {
+        const o = document.createElement('option');
+        o.value = i;
+        o.textContent = f.name;
+        select.appendChild(o);
+      });
+      if (files.length) loadFile(files[0]);
+    });
+
+    document.getElementById('trackList').addEventListener('change', e => {
+      const index = e.target.value;
+      if (files[index]) loadFile(files[index]);
+    });
+
+    // Load audio into player and waveform
+    function loadFile(file) {
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      audio.src = url;
+      audio.load();
+      waveform.load(url);
+
+      if (src) src.disconnect();
+      src = ctx.createMediaElementSource(audio);
+      gain = ctx.createGain();
+      gain.gain.setValueAtTime(1, ctx.currentTime);
+      src.connect(gain).connect(ctx.destination);
+    }
+
+    document.getElementById('playBtn').addEventListener('click', () => {
+      const t = parseFloat(fadeInput.value);
+      ctx.resume().then(() => {
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(1, ctx.currentTime + t);
+        audio.play();
+      });
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+      const t = parseFloat(fadeInput.value);
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t);
+      setTimeout(() => audio.pause(), t * 1000);
+    });
+
+    // Save/load playlist names to localStorage
+    document.getElementById('saveBtn').addEventListener('click', () => {
+      const fileNames = files.map(f => f.name);
+      localStorage.setItem('playlistNames', JSON.stringify(fileNames));
+      alert('✅ Playlist saved! Note: File content is not saved, only file names.');
+    });
+
+    document.getElementById('loadBtn').addEventListener('click', () => {
+      const savedNames = JSON.parse(localStorage.getItem('playlistNames') || '[]');
+      if (!savedNames.length) return alert('No saved playlist found.');
+      const select = document.getElementById('trackList');
+      select.innerHTML = '';
+      savedNames.forEach((name, i) => {
+        const o = document.createElement('option');
+        o.textContent = name + " (re-upload needed)";
+        o.disabled = true;
+        select.appendChild(o);
+      });
+      alert('✅ Playlist names loaded. Please re-upload audio files manually to play them.');
+    });
+  </script>
+</body>
+</html>
