@@ -1,40 +1,50 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Audio Crossfade Pro</title>
+  <title>WaveSurfer Audio Crossfade Player</title>
   <style>
     body {
       font-family: sans-serif;
-      text-align: center;
       padding: 2em;
+      text-align: center;
       transition: background 0.3s, color 0.3s;
       background: #fff;
       color: #000;
     }
     body.dark {
-      background: #111;
+      background: #121212;
       color: #eee;
     }
     input, select, button {
-      margin: 0.5em;
-      padding: 0.4em;
-      vertical-align: middle;
-    }
-    .note {
-      margin-top: 2em;
-      font-style: italic;
-      color: gray;
+      margin: 0.4em;
+      padding: 0.5em 1em;
+      font-size: 1em;
     }
     .toggle {
-      position: absolute;
+      position: fixed;
       top: 10px;
       right: 10px;
+      cursor: pointer;
+      user-select: none;
+      padding: 0.3em 0.7em;
+      border: 1px solid #888;
+      border-radius: 4px;
+      background: #eee;
+    }
+    body.dark .toggle {
+      background: #333;
+      border-color: #ccc;
+      color: #eee;
     }
     #waveform {
+      margin: 1.5em auto;
       width: 90%;
-      margin: 1em auto;
       cursor: pointer;
+      height: 80px;
+    }
+    #controls {
+      margin-top: 1em;
     }
     #volumeControl {
       display: inline-flex;
@@ -42,211 +52,247 @@
       margin-left: 1em;
     }
     #muteBtn {
-      font-size: 1.5em;
       cursor: pointer;
       margin-left: 0.3em;
+      font-size: 1.4em;
       user-select: none;
+    }
+    .note {
+      margin-top: 2em;
+      font-style: italic;
+      color: gray;
     }
   </style>
   <script src="https://unpkg.com/wavesurfer.js"></script>
 </head>
 <body>
-  <button class="toggle">Toggle Dark Mode</button>
+  <div class="toggle" id="darkToggle">Toggle Dark Mode</div>
 
-  <h2>Audio Player with Crossfade</h2>
-  <input type="file" accept="audio/*" id="fileInput" multiple /><br />
-  <select id="trackList"></select><br />
+  <h2>Audio Player with Crossfade & Waveform</h2>
+  <input type="file" id="fileInput" accept="audio/*" multiple />
+  <br />
+  <select id="trackList" style="min-width: 200px; margin-top: 0.5em;"></select>
 
-  <button id="playBtn">Play</button>
-  <button id="pauseBtn">Pause</button>
+  <div id="controls">
+    <button id="playBtn">Play</button>
+    <button id="pauseBtn">Pause</button>
 
-  <div id="volumeControl" style="display:inline-block;">
-    <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" />
-    <span id="muteBtn" title="Mute/Unmute">&#128266;</span>
+    <div id="volumeControl">
+      <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" />
+      <span id="muteBtn" title="Mute/Unmute">&#128266;</span>
+    </div>
+
+    <label style="margin-left: 1em;">
+      Crossfade Duration (sec):
+      <input type="number" id="fadeDuration" min="0" step="0.1" value="2" style="width: 4em; margin-left: 0.3em;" />
+    </label>
   </div>
-
-  <button id="saveBtn">💾 Save Playlist</button>
-  <button id="loadBtn">📂 Load Playlist</button><br />
-
-  <label>Crossfade Duration (sec):
-    <input type="number" id="fadeDuration" value="2" min="0" step="0.1" />
-  </label>
 
   <div id="waveform"></div>
 
+  <button id="saveBtn" style="margin-top: 1em;">💾 Save Playlist</button>
+  <button id="loadBtn" style="margin-top: 1em;">📂 Load Playlist</button>
+
   <div class="note">
-    How it works: When you press the play/pause button, it will fade in or out the audio based on the duration you set. Click or drag on the waveform to seek.
+    How it works: Click play/pause for crossfade effect. Click or drag on the waveform to seek. Volume and mute controls included.
   </div>
 
   <script>
-    let audio = new Audio();
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    let src, gain;
-    let files = [];
-
-    // Create waveform with interaction enabled
+    // WaveSurfer setup
     const waveform = WaveSurfer.create({
       container: '#waveform',
       waveColor: '#999',
       progressColor: '#2e86de',
       height: 80,
-      interact: true,
       cursorColor: '#333',
+      interact: true,
+      responsive: true,
     });
 
-    // Dark mode
+    // State variables
+    let files = [];
+    let isMuted = false;
+    let savedVolume = 1;
+
+    // Load from localStorage
+    const savedDark = localStorage.getItem('darkMode') === 'true';
+    const savedFadeDuration = localStorage.getItem('fadeDuration') || '2';
+    const savedPlaylist = JSON.parse(localStorage.getItem('playlistNames') || '[]');
+    const savedVolumeStored = localStorage.getItem('volume');
+    const savedMutedStored = localStorage.getItem('muted');
+
+    // Elements
     const body = document.body;
-    if (localStorage.getItem('darkMode') === 'true') body.classList.add('dark');
-    document.querySelector('.toggle').addEventListener('click', () => {
-      const isDark = body.classList.toggle('dark');
-      localStorage.setItem('darkMode', isDark);
-    });
-
-    // Fade duration memory
-    const fadeInput = document.getElementById('fadeDuration');
-    const savedFade = localStorage.getItem('fadeDuration');
-    if (savedFade) fadeInput.value = savedFade;
-    fadeInput.addEventListener('change', () => {
-      localStorage.setItem('fadeDuration', fadeInput.value);
-    });
-
-    // Volume control elements
+    const darkToggle = document.getElementById('darkToggle');
+    const fileInput = document.getElementById('fileInput');
+    const trackList = document.getElementById('trackList');
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
     const volumeSlider = document.getElementById('volumeSlider');
     const muteBtn = document.getElementById('muteBtn');
+    const fadeDurationInput = document.getElementById('fadeDuration');
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
 
-    // Load saved volume and mute state
-    let savedVolume = parseFloat(localStorage.getItem('volume'));
-    let savedMuted = localStorage.getItem('muted') === 'true';
+    // Initialize dark mode
+    if (savedDark) body.classList.add('dark');
+    darkToggle.textContent = savedDark ? 'Light Mode' : 'Dark Mode';
 
-    if (!isNaN(savedVolume)) {
+    // Initialize crossfade duration
+    fadeDurationInput.value = savedFadeDuration;
+
+    // Initialize volume and mute
+    if (savedVolumeStored !== null) {
+      savedVolume = parseFloat(savedVolumeStored);
       volumeSlider.value = savedVolume;
-      audio.volume = savedVolume;
-    } else {
-      audio.volume = 1;
     }
-    audio.muted = savedMuted;
-    updateMuteIcon();
+    if (savedMutedStored !== null) {
+      isMuted = savedMutedStored === 'true';
+    }
+    updateVolume();
 
-    // Update audio volume when slider changes
-    volumeSlider.addEventListener('input', () => {
-      audio.volume = parseFloat(volumeSlider.value);
-      localStorage.setItem('volume', volumeSlider.value);
-      if (audio.volume === 0) {
-        audio.muted = true;
-      } else {
-        audio.muted = false;
-      }
-      localStorage.setItem('muted', audio.muted);
-      updateMuteIcon();
+    // Dark mode toggle
+    darkToggle.addEventListener('click', () => {
+      body.classList.toggle('dark');
+      const isDarkNow = body.classList.contains('dark');
+      localStorage.setItem('darkMode', isDarkNow);
+      darkToggle.textContent = isDarkNow ? 'Light Mode' : 'Dark Mode';
     });
 
-    // Mute/unmute toggle
-    muteBtn.addEventListener('click', () => {
-      audio.muted = !audio.muted;
-      localStorage.setItem('muted', audio.muted);
-      if (audio.muted) {
+    // Volume and mute functions
+    function updateVolume() {
+      if (isMuted) {
+        waveform.setVolume(0);
+        muteBtn.textContent = '🔇';
         volumeSlider.value = 0;
       } else {
-        volumeSlider.value = audio.volume > 0 ? audio.volume : 1;
+        waveform.setVolume(savedVolume);
+        muteBtn.textContent = '🔊';
+        volumeSlider.value = savedVolume;
       }
-      localStorage.setItem('volume', volumeSlider.value);
-      updateMuteIcon();
-    });
-
-    function updateMuteIcon() {
-      muteBtn.textContent = audio.muted ? '🔇' : '🔊';
+      localStorage.setItem('volume', savedVolume);
+      localStorage.setItem('muted', isMuted);
     }
 
-    // File upload and track list
-    document.getElementById('fileInput').addEventListener('change', e => {
+    volumeSlider.addEventListener('input', () => {
+      savedVolume = parseFloat(volumeSlider.value);
+      if (savedVolume === 0) {
+        isMuted = true;
+      } else {
+        isMuted = false;
+      }
+      updateVolume();
+    });
+
+    muteBtn.addEventListener('click', () => {
+      isMuted = !isMuted;
+      updateVolume();
+    });
+
+    // Crossfade helpers
+    function fadeVolume(from, to, durationSec) {
+      if (durationSec <= 0) {
+        waveform.setVolume(to);
+        return Promise.resolve();
+      }
+      return new Promise(resolve => {
+        const steps = 20;
+        const stepTime = (durationSec * 1000) / steps;
+        let currentStep = 0;
+        const diff = to - from;
+
+        function step() {
+          currentStep++;
+          const vol = from + (diff * (currentStep / steps));
+          waveform.setVolume(vol);
+          if (currentStep < steps) {
+            setTimeout(step, stepTime);
+          } else {
+            resolve();
+          }
+        }
+        step();
+      });
+    }
+
+    // Play with fade-in
+    playBtn.addEventListener('click', async () => {
+      const fadeSec = parseFloat(fadeDurationInput.value) || 0;
+      waveform.setVolume(0);
+      waveform.play();
+      await fadeVolume(0, isMuted ? 0 : savedVolume, fadeSec);
+    });
+
+    // Pause with fade-out
+    pauseBtn.addEventListener('click', async () => {
+      const fadeSec = parseFloat(fadeDurationInput.value) || 0;
+      const currentVol = isMuted ? 0 : savedVolume;
+      await fadeVolume(currentVol, 0, fadeSec);
+      waveform.pause();
+    });
+
+    // Save crossfade duration on change
+    fadeDurationInput.addEventListener('change', () => {
+      localStorage.setItem('fadeDuration', fadeDurationInput.value);
+    });
+
+    // Load files and populate track list
+    fileInput.addEventListener('change', e => {
       files = Array.from(e.target.files);
-      const select = document.getElementById('trackList');
-      select.innerHTML = '';
-      files.forEach((f, i) => {
-        const o = document.createElement('option');
-        o.value = i;
-        o.textContent = f.name;
-        select.appendChild(o);
+      populateTrackList();
+      if (files.length) loadTrack(0);
+    });
+
+    // Select track from dropdown
+    trackList.addEventListener('change', e => {
+      const index = parseInt(e.target.value, 10);
+      if (!isNaN(index) && files[index]) loadTrack(index);
+    });
+
+    // Populate track list dropdown
+    function populateTrackList() {
+      trackList.innerHTML = '';
+      files.forEach((file, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = file.name;
+        trackList.appendChild(opt);
       });
-      if (files.length) loadFile(files[0]);
-    });
-
-    document.getElementById('trackList').addEventListener('change', e => {
-      const index = e.target.value;
-      if (files[index]) loadFile(files[index]);
-    });
-
-    // Load audio and waveform
-    function loadFile(file) {
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      audio.src = url;
-      audio.load();
-      waveform.load(url);
-
-      if (src) src.disconnect();
-      src = ctx.createMediaElementSource(audio);
-      gain = ctx.createGain();
-      gain.gain.setValueAtTime(1, ctx.currentTime);
-      src.connect(gain).connect(ctx.destination);
-
-      // Apply current volume and mute state to audio context gain node as well
-      gain.gain.setValueAtTime(audio.muted ? 0 : audio.volume, ctx.currentTime);
     }
 
-    // Play button with crossfade fade-in
-    document.getElementById('playBtn').addEventListener('click', () => {
-      const t = parseFloat(fadeInput.value);
-      ctx.resume().then(() => {
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(audio.muted ? 0 : audio.volume, ctx.currentTime + t);
-        audio.play();
-      });
+    // Load track into WaveSurfer
+    function loadTrack(index) {
+      if (!files[index]) return;
+      const url = URL.createObjectURL(files[index]);
+      waveform.load(url);
+      trackList.value = index;
+    }
+
+    // Save playlist names (only names) to localStorage
+    saveBtn.addEventListener('click', () => {
+      const names = files.map(f => f.name);
+      localStorage.setItem('playlistNames', JSON.stringify(names));
+      alert('Playlist saved (file names only). Re-upload files to play.');
     });
 
-    // Pause button with crossfade fade-out
-    document.getElementById('pauseBtn').addEventListener('click', () => {
-      const t = parseFloat(fadeInput.value);
-      gain.gain.cancelScheduledValues(ctx.currentTime);
-      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t);
-      setTimeout(() => audio.pause(), t * 1000);
-    });
-
-    // Sync waveform with audio playback
-    audio.addEventListener('timeupdate', () => {
-      if (!waveform.isSeeking()) {
-        waveform.seekTo(audio.currentTime / audio.duration);
+    // Load playlist names from localStorage (cannot load files themselves)
+    loadBtn.addEventListener('click', () => {
+      const names = JSON.parse(localStorage.getItem('playlistNames') || '[]');
+      if (!names.length) {
+        alert('No saved playlist found.');
+        return;
       }
-    });
-
-    // Seek audio when waveform clicked or dragged
-    waveform.on('seek', progress => {
-      if (audio.duration) {
-        audio.currentTime = progress * audio.duration;
-      }
-    });
-
-    // Save/load playlist names to localStorage
-    document.getElementById('saveBtn').addEventListener('click', () => {
-      const fileNames = files.map(f => f.name);
-      localStorage.setItem('playlistNames', JSON.stringify(fileNames));
-      alert('✅ Playlist saved! Note: File content is not saved, only file names.');
-    });
-
-    document.getElementById('loadBtn').addEventListener('click', () => {
-      const savedNames = JSON.parse(localStorage.getItem('playlistNames') || '[]');
-      if (!savedNames.length) return alert('No saved playlist found.');
-      const select = document.getElementById('trackList');
-      select.innerHTML = '';
-      savedNames.forEach((name, i) => {
-        const o = document.createElement('option');
-        o.textContent = name + " (re-upload needed)";
-        o.disabled = true;
-        select.appendChild(o);
+      files = [];
+      trackList.innerHTML = '';
+      names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.textContent = name + ' (re-upload needed)';
+        opt.disabled = true;
+        trackList.appendChild(opt);
       });
-      alert('✅ Playlist names loaded. Please re-upload audio files manually to play them.');
+      alert('Playlist loaded. Please re-upload files manually.');
     });
+
   </script>
 </body>
 </html>
