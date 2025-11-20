@@ -4,21 +4,50 @@
 <meta charset="UTF-8">
 <title>Audio Crossfade Player</title>
 <script src="https://unpkg.com/wavesurfer.js"></script>
+
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #111;
-        color: white;
-        padding: 20px;
+    :root {
+        --bg: #ffffff;
+        --text: #000000;
+        --panel: #f2f2f2;
+        --wave: #555;
+        --wave-progress: #000;
     }
+
+    body.dark {
+        --bg: #111;
+        --text: #fff;
+        --panel: #222;
+        --wave: #777;
+        --wave-progress: #fff;
+    }
+
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        transition: background 0.3s, color 0.3s;
+    }
+
     .controls {
         margin-top: 15px;
     }
-    button, input[type="number"], input[type="range"] {
+
+    button, input[type="number"], input[type="range"], label {
         padding: 8px;
         margin-right: 10px;
         margin-top: 10px;
     }
+
+    #modeToggle {
+        cursor: pointer;
+        padding: 6px 10px;
+        background: var(--panel);
+        border-radius: 5px;
+        border: 1px solid #999;
+    }
+
     #playlist {
         margin-top: 20px;
     }
@@ -27,6 +56,11 @@
 <body>
 
 <h2>Audio Crossfade Player</h2>
+
+<!-- Light / Dark Mode -->
+<button id="modeToggle">🌙 Dark Mode</button>
+
+<br><br>
 
 <!-- AUDIO-ONLY UPLOADS -->
 <input type="file" id="fileInput" accept="audio/*" multiple>
@@ -53,13 +87,25 @@
 <ol id="playlist"></ol>
 
 <script>
-/* -------------------------------
-   DATA + WAVESURFER SETUP
--------------------------------- */
+/* --------------------------------------
+   LIGHT / DARK MODE
+-------------------------------------- */
+const modeBtn = document.getElementById("modeToggle");
+
+modeBtn.onclick = () => {
+    document.body.classList.toggle("dark");
+    modeBtn.textContent = document.body.classList.contains("dark")
+        ? "☀️ Light Mode"
+        : "🌙 Dark Mode";
+};
+
+/* --------------------------------------
+   WAVESURFER SETUP
+-------------------------------------- */
 let wavesurfer = WaveSurfer.create({
     container: '#waveform',
-    waveColor: "#999",
-    progressColor: "#fff",
+    waveColor: getComputedStyle(document.body).getPropertyValue("--wave"),
+    progressColor: getComputedStyle(document.body).getPropertyValue("--wave-progress"),
     responsive: true,
     height: 120
 });
@@ -69,12 +115,10 @@ let currentIndex = 0;
 let isMuted = false;
 let previousVolume = 1;
 
-/* -------------------------------
-   LOAD AUDIO
--------------------------------- */
-const fileInput = document.getElementById("fileInput");
-
-fileInput.addEventListener("change", async (e) => {
+/* --------------------------------------
+   LOAD AUDIO FILES
+-------------------------------------- */
+document.getElementById("fileInput").addEventListener("change", async (e) => {
     playlist = [];
     currentIndex = 0;
 
@@ -89,9 +133,9 @@ fileInput.addEventListener("change", async (e) => {
     loadTrack(0);
 });
 
-/* -------------------------------
-   RENDER PLAYLIST
--------------------------------- */
+/* --------------------------------------
+   PLAYLIST UI
+-------------------------------------- */
 function renderPlaylist() {
     let list = document.getElementById("playlist");
     list.innerHTML = "";
@@ -105,24 +149,24 @@ function renderPlaylist() {
     });
 }
 
-/* -------------------------------
-   LOAD TRACK
--------------------------------- */
+/* --------------------------------------
+   LOAD A TRACK INTO WAVESURFER
+-------------------------------------- */
 function loadTrack(i) {
     currentIndex = i;
     wavesurfer.load(playlist[i].file);
 }
 
-/* -------------------------------
+/* --------------------------------------
    PLAY / PAUSE
--------------------------------- */
+-------------------------------------- */
 document.getElementById("playPause").onclick = () => {
     wavesurfer.playPause();
 };
 
-/* -------------------------------
+/* --------------------------------------
    VOLUME + MUTE
--------------------------------- */
+-------------------------------------- */
 const volumeSlider = document.getElementById("volumeSlider");
 const muteBtn = document.getElementById("muteBtn");
 
@@ -150,9 +194,9 @@ muteBtn.onclick = () => {
     }
 };
 
-/* -------------------------------
-   DJ-STYLE OVERLAP CROSSFADE
--------------------------------- */
+/* --------------------------------------
+   FADE HELPER
+-------------------------------------- */
 function fadeVolume(ws, from, to, duration) {
     let steps = 30;
     let stepTime = duration * 1000 / steps;
@@ -166,9 +210,11 @@ function fadeVolume(ws, from, to, duration) {
     }, stepTime);
 }
 
+/* --------------------------------------
+   DJ-STYLE OVERLAPPING CROSSFADE
+-------------------------------------- */
 function playNextWithCrossfade() {
     let fadeDur = parseFloat(document.getElementById("crossfade").value);
-
     let nextIndex = (currentIndex + 1) % playlist.length;
 
     let nextWS = WaveSurfer.create({
@@ -196,9 +242,9 @@ function playNextWithCrossfade() {
     nextWS.load(playlist[nextIndex].file);
 }
 
-/* -------------------------------
-   DETECT END → CROSSFADE
--------------------------------- */
+/* --------------------------------------
+   DETECT WHEN SONG IS ENDING
+-------------------------------------- */
 function setupEndWatcher() {
     wavesurfer.on("audioprocess", () => {
         let remaining = wavesurfer.getDuration() - wavesurfer.getCurrentTime();
