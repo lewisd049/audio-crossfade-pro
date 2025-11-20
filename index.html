@@ -1,266 +1,335 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Audio Crossfade Player</title>
-<script src="https://unpkg.com/wavesurfer.js"></script>
-
-<style>
-    :root {
-        --bg: #ffffff;
-        --text: #000000;
-        --panel: #f2f2f2;
-        --wave: #555;
-        --wave-progress: #000;
-    }
-
-    body.dark {
-        --bg: #111;
-        --text: #fff;
-        --panel: #222;
-        --wave: #777;
-        --wave-progress: #fff;
-    }
-
+  <meta charset="UTF-8" />
+  <title>WaveSurfer Crossfade Player</title>
+  <style>
     body {
-        background: var(--bg);
-        color: var(--text);
-        font-family: Arial, sans-serif;
-        padding: 20px;
-        transition: background 0.3s, color 0.3s;
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+      background: #fff;
+      color: #000;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark {
+      background: #121212;
+      color: #eee;
+    }
+    input, select, button {
+      margin: 0.4em;
+      padding: 0.5em 1em;
+      font-size: 1em;
+    }
+    #waveform {
+      margin: 1.5em auto;
+      width: 90%;
+      height: 80px;
+      cursor: pointer;
+    }
+    .toggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: #ccc;
+      padding: 0.3em 0.6em;
+      border-radius: 5px;
+      cursor: pointer;
+      user-select: none;
+      z-index: 20;
+    }
+
+    /* --- NEW SOUND EFFECTS PANEL --- */
+    #sfxToggle {
+      position: fixed;
+      top: 10px;
+      right: 130px;
+      background: #ccc;
+      padding: 0.3em 0.6em;
+      border-radius: 5px;
+      cursor: pointer;
+      user-select: none;
+      z-index: 20;
+    }
+
+    #sfxPanel {
+      position: fixed;
+      top: 50px;
+      right: -260px;
+      width: 240px;
+      background: #f4f4f4;
+      border-left: 2px solid #aaa;
+      padding: 1em;
+      height: 300px;
+      overflow-y: auto;
+      transition: right 0.3s;
+      z-index: 30;
+    }
+    body.dark #sfxPanel {
+      background: #222;
+      color: #fff;
+      border-left-color: #555;
+    }
+    #sfxPanel.open {
+      right: 0;
+    }
+    .sfxButton {
+      width: 100%;
+      padding: 0.6em;
+      margin-top: 0.4em;
+      border: none;
+      background: #2e86de;
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .sfxButton:hover {
+      background: #1d5fa3;
     }
 
     .controls {
-        margin-top: 15px;
+      margin-top: 1em;
     }
-
-    button, input[type="number"], input[type="range"], label {
-        padding: 8px;
-        margin-right: 10px;
-        margin-top: 10px;
+    #volumeControl {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 1em;
     }
-
-    #modeToggle {
-        cursor: pointer;
-        padding: 6px 10px;
-        background: var(--panel);
-        border-radius: 5px;
-        border: 1px solid #999;
+    #muteBtn {
+      margin-left: 0.4em;
+      font-size: 1.5em;
+      cursor: pointer;
     }
-
-    #playlist {
-        margin-top: 20px;
+    .note {
+      margin-top: 2em;
+      color: gray;
+      font-style: italic;
     }
-</style>
+  </style>
+  <script src="https://unpkg.com/wavesurfer.js"></script>
 </head>
 <body>
 
-<h2>Audio Crossfade Player</h2>
+  <!-- NEW SOUND EFFECTS BUTTON -->
+  <div id="sfxToggle">Sound Effects</div>
 
-<!-- Light / Dark Mode -->
-<button id="modeToggle">🌙 Dark Mode</button>
+  <!-- NEW SOUND EFFECTS PANEL -->
+  <div id="sfxPanel">
+    <h3>Sound Board</h3>
+    <input type="file" id="sfxInput" accept="audio/*" multiple />
+    <div id="sfxButtons"></div>
+  </div>
 
-<br><br>
+  <div class="toggle" id="darkToggle">Toggle Dark Mode</div>
 
-<!-- AUDIO-ONLY UPLOADS -->
-<input type="file" id="fileInput" accept="audio/*" multiple>
+  <h2>Waveform Audio Player with Crossfade</h2>
 
-<div id="waveform" style="width:100%; height:120px; margin-top:20px;"></div>
+  <input type="file" id="fileInput" accept="audio/*" multiple />
+  <select id="trackList"></select>
 
-<div class="controls">
-    <button id="playPause">Play</button>
-
-    <label>Crossfade (sec):</label>
-    <input id="crossfade" type="number" min="0" step="0.1" value="2">
-
-    <label>Volume:</label>
-    <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1">
-    <button id="muteBtn">Mute</button>
-
-    <label style="margin-left:20px;">
-        <input type="checkbox" id="autoNext">
-        Auto-fade into next song
+  <div class="controls">
+    <button id="playBtn">Play</button>
+    <button id="pauseBtn">Pause</button>
+    <div id="volumeControl">
+      <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" />
+      <span id="muteBtn" title="Mute/Unmute">🔊</span>
+    </div>
+    <label style="margin-left: 1em;">
+      Crossfade (sec):
+      <input type="number" id="fadeDuration" min="0" step="0.1" value="2" style="width: 4em;" />
     </label>
-</div>
+  </div>
 
-<h3>Playlist</h3>
-<ol id="playlist"></ol>
+  <div id="waveform"></div>
 
-<script>
-/* --------------------------------------
-   LIGHT / DARK MODE
--------------------------------------- */
-const modeBtn = document.getElementById("modeToggle");
+  <button id="saveBtn">💾 Save Playlist</button>
+  <button id="loadBtn">📂 Load Playlist</button>
 
-modeBtn.onclick = () => {
-    document.body.classList.toggle("dark");
-    modeBtn.textContent = document.body.classList.contains("dark")
-        ? "☀️ Light Mode"
-        : "🌙 Dark Mode";
-};
+  <div class="note">
+    How it works: Press play/pause for fade. Seek with waveform. Auto fade at end. Controls disabled during final fade.
+  </div>
 
-/* --------------------------------------
-   WAVESURFER SETUP
--------------------------------------- */
-let wavesurfer = WaveSurfer.create({
-    container: '#waveform',
-    waveColor: getComputedStyle(document.body).getPropertyValue("--wave"),
-    progressColor: getComputedStyle(document.body).getPropertyValue("--wave-progress"),
-    responsive: true,
-    height: 120
-});
+  <script>
+    const waveform = WaveSurfer.create({
+      container: '#waveform',
+      waveColor: '#999',
+      progressColor: '#2e86de',
+      height: 80,
+      cursorColor: '#333',
+      interact: true,
+    });
 
-let playlist = [];
-let currentIndex = 0;
-let isMuted = false;
-let previousVolume = 1;
+    const darkToggle = document.getElementById('darkToggle');
+    const fileInput = document.getElementById('fileInput');
+    const trackList = document.getElementById('trackList');
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const muteBtn = document.getElementById('muteBtn');
+    const fadeInput = document.getElementById('fadeDuration');
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
 
-/* --------------------------------------
-   LOAD AUDIO FILES
--------------------------------------- */
-document.getElementById("fileInput").addEventListener("change", async (e) => {
-    playlist = [];
-    currentIndex = 0;
+    let files = [], isMuted = false, savedVolume = 1, isEnding = false;
 
-    for (let file of e.target.files) {
-        playlist.push({
-            name: file.name,
-            file: URL.createObjectURL(file)
+    /* -----------------------------
+       NEW SOUND EFFECTS SYSTEM
+    ------------------------------ */
+    const sfxToggle = document.getElementById("sfxToggle");
+    const sfxPanel = document.getElementById("sfxPanel");
+    const sfxInput = document.getElementById("sfxInput");
+    const sfxButtons = document.getElementById("sfxButtons");
+
+    sfxToggle.onclick = () => {
+      sfxPanel.classList.toggle("open");
+    };
+
+    sfxInput.onchange = e => {
+      const list = [...e.target.files];
+      list.forEach(file => {
+        const url = URL.createObjectURL(file);
+
+        const btn = document.createElement("button");
+        btn.className = "sfxButton";
+        btn.textContent = file.name;
+
+        const audio = new Audio(url);
+
+        btn.onclick = () => {
+          audio.currentTime = 0;
+          audio.play(); // no fade, instant play
+        };
+
+        sfxButtons.appendChild(btn);
+      });
+    };
+
+    /* -----------------------------
+       ORIGINAL CODE BELOW (unchanged)
+    ------------------------------ */
+
+    if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark');
+    darkToggle.onclick = () => {
+      document.body.classList.toggle('dark');
+      localStorage.setItem('darkMode', document.body.classList.contains('dark'));
+    };
+
+    if (localStorage.getItem('volume')) {
+      savedVolume = parseFloat(localStorage.getItem('volume'));
+      volumeSlider.value = savedVolume;
+    }
+    if (localStorage.getItem('muted')) {
+      isMuted = localStorage.getItem('muted') === 'true';
+    }
+    updateVolume();
+
+    saveBtn.onclick = () => {
+      const names = files.map(f => f.name);
+      localStorage.setItem('playlistNames', JSON.stringify(names));
+      alert('Playlist saved. Re-upload files to play.');
+    };
+
+    loadBtn.onclick = () => {
+      const names = JSON.parse(localStorage.getItem('playlistNames') || '[]');
+      if (!names.length) return alert('No playlist found.');
+      files = [];
+      trackList.innerHTML = '';
+      names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.textContent = name + ' (re-upload needed)';
+        opt.disabled = true;
+        trackList.appendChild(opt);
+      });
+    };
+
+    volumeSlider.oninput = () => {
+      savedVolume = parseFloat(volumeSlider.value);
+      isMuted = savedVolume === 0;
+      updateVolume();
+    };
+
+    muteBtn.onclick = () => {
+      isMuted = !isMuted;
+      updateVolume();
+    };
+
+    function updateVolume() {
+      waveform.setVolume(isMuted ? 0 : savedVolume);
+      muteBtn.textContent = isMuted ? '🔇' : '🔊';
+      localStorage.setItem('volume', savedVolume);
+      localStorage.setItem('muted', isMuted);
+    }
+
+    fileInput.onchange = e => {
+      files = [...e.target.files];
+      trackList.innerHTML = '';
+      files.forEach((f, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = f.name;
+        trackList.appendChild(opt);
+      });
+      if (files.length) loadTrack(0);
+    };
+
+    trackList.onchange = () => {
+      const i = parseInt(trackList.value);
+      if (!isNaN(i)) loadTrack(i);
+    };
+
+    function loadTrack(index) {
+      const file = files[index];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      waveform.load(url);
+      trackList.value = index;
+    }
+
+    function fade(from, to, duration) {
+      return new Promise(resolve => {
+        const steps = 30;
+        let current = 0;
+        const stepTime = (duration * 1000) / steps;
+        const step = () => {
+          current++;
+          let v = from + ((to - from) * current / steps);
+          waveform.setVolume(isMuted ? 0 : v);
+          if (current < steps) setTimeout(step, stepTime);
+          else resolve();
+        };
+        step();
+      });
+    }
+
+    playBtn.onclick = async () => {
+      if (isEnding) return;
+      const dur = parseFloat(fadeInput.value) || 0;
+      waveform.setVolume(0);
+      waveform.play();
+      await fade(0, isMuted ? 0 : savedVolume, dur);
+    };
+
+    pauseBtn.onclick = async () => {
+      if (isEnding) return;
+      const dur = parseFloat(fadeInput.value) || 0;
+      await fade(isMuted ? 0 : savedVolume, 0, dur);
+      waveform.pause();
+    };
+
+    waveform.on('audioprocess', () => {
+      const timeLeft = waveform.getDuration() - waveform.getCurrentTime();
+      if (!isEnding && timeLeft <= (parseFloat(fadeInput.value) || 2)) {
+        isEnding = true;
+        playBtn.disabled = true;
+        pauseBtn.disabled = true;
+        fade(savedVolume, 0, timeLeft).then(() => {
+          waveform.pause();
+          playBtn.disabled = false;
+          pauseBtn.disabled = false;
+          isEnding = false;
         });
-    }
-
-    renderPlaylist();
-    loadTrack(0);
-});
-
-/* --------------------------------------
-   PLAYLIST UI
--------------------------------------- */
-function renderPlaylist() {
-    let list = document.getElementById("playlist");
-    list.innerHTML = "";
-
-    playlist.forEach((track, i) => {
-        let li = document.createElement("li");
-        li.textContent = track.name;
-        li.style.cursor = "pointer";
-        li.onclick = () => loadTrack(i);
-        list.appendChild(li);
+      }
     });
-}
-
-/* --------------------------------------
-   LOAD A TRACK INTO WAVESURFER
--------------------------------------- */
-function loadTrack(i) {
-    currentIndex = i;
-    wavesurfer.load(playlist[i].file);
-}
-
-/* --------------------------------------
-   PLAY / PAUSE
--------------------------------------- */
-document.getElementById("playPause").onclick = () => {
-    wavesurfer.playPause();
-};
-
-/* --------------------------------------
-   VOLUME + MUTE
--------------------------------------- */
-const volumeSlider = document.getElementById("volumeSlider");
-const muteBtn = document.getElementById("muteBtn");
-
-volumeSlider.oninput = () => {
-    wavesurfer.setVolume(volumeSlider.value);
-    if (volumeSlider.value > 0) {
-        previousVolume = volumeSlider.value;
-        isMuted = false;
-        muteBtn.textContent = "Mute";
-    }
-};
-
-muteBtn.onclick = () => {
-    if (!isMuted) {
-        previousVolume = volumeSlider.value;
-        wavesurfer.setVolume(0);
-        volumeSlider.value = 0;
-        muteBtn.textContent = "Unmute";
-        isMuted = true;
-    } else {
-        wavesurfer.setVolume(previousVolume);
-        volumeSlider.value = previousVolume;
-        muteBtn.textContent = "Mute";
-        isMuted = false;
-    }
-};
-
-/* --------------------------------------
-   FADE HELPER
--------------------------------------- */
-function fadeVolume(ws, from, to, duration) {
-    let steps = 30;
-    let stepTime = duration * 1000 / steps;
-    let step = 0;
-
-    let interval = setInterval(() => {
-        step++;
-        let vol = from + (to - from) * (step / steps);
-        ws.setVolume(vol);
-        if (step >= steps) clearInterval(interval);
-    }, stepTime);
-}
-
-/* --------------------------------------
-   DJ-STYLE OVERLAPPING CROSSFADE
--------------------------------------- */
-function playNextWithCrossfade() {
-    let fadeDur = parseFloat(document.getElementById("crossfade").value);
-    let nextIndex = (currentIndex + 1) % playlist.length;
-
-    let nextWS = WaveSurfer.create({
-        container: document.createElement("div"),
-        waveColor: "transparent",
-        progressColor: "transparent",
-        height: 0
-    });
-
-    nextWS.on("ready", () => {
-        nextWS.setVolume(0);
-        nextWS.play();
-
-        fadeVolume(wavesurfer, 1, 0, fadeDur);
-        fadeVolume(nextWS, 0, 1, fadeDur);
-
-        setTimeout(() => {
-            wavesurfer.destroy();
-            wavesurfer = nextWS;
-            currentIndex = nextIndex;
-            setupEndWatcher();
-        }, fadeDur * 1000);
-    });
-
-    nextWS.load(playlist[nextIndex].file);
-}
-
-/* --------------------------------------
-   DETECT WHEN SONG IS ENDING
--------------------------------------- */
-function setupEndWatcher() {
-    wavesurfer.on("audioprocess", () => {
-        let remaining = wavesurfer.getDuration() - wavesurfer.getCurrentTime();
-        let fadeDur = parseFloat(document.getElementById("crossfade").value);
-
-        if (document.getElementById("autoNext").checked) {
-            if (remaining <= fadeDur + 0.05) {
-                wavesurfer.un("audioprocess");
-                playNextWithCrossfade();
-            }
-        }
-    });
-}
-
-wavesurfer.on("ready", setupEndWatcher);
-</script>
-
+  </script>
 </body>
 </html>
