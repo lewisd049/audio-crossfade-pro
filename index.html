@@ -1,499 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>WaveSurfer Crossfade Player — With SFX Panel</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFX Menu System</title>
 
-  <script src="https://unpkg.com/wavesurfer.js"></script>
-
-  <style>
-    /* ---------- Base layout & theme ---------- */
+<style>
     :root {
-      --bg: #fff;
-      --text: #000;
-      --panel-bg: #f0f0f0;
-      --muted: gray;
-      --accent: #2e86de;
+        --bg: #ffffff;
+        --text: #000000;
+        --panel: #f2f2f2;
+        --button: #e5e5e5;
+        --blur: rgba(0,0,0,0.4);
     }
+
     body.dark {
-      --bg: #121212;
-      --text: #eee;
-      --panel-bg: #1e1e1e;
-      --muted: #999;
+        --bg: #121212;
+        --text: #ffffff;
+        --panel: #1f1f1f;
+        --button: #2c2c2c;
+        --blur: rgba(255,255,255,0.2);
     }
 
     body {
-      margin: 0;
-      font-family: sans-serif;
-      text-align: center;
-      padding: 2em;
-      background: var(--bg);
-      color: var(--text);
-      transition: background 0.3s, color 0.3s;
+        font-family: Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        margin: 0;
+        transition: background 0.3s, color 0.3s;
     }
 
-    h2 { margin-top: 0; }
-
-    input, select, button {
-      margin: 0.4em;
-      padding: 0.5em 1em;
-      font-size: 1em;
+    /* Blur effect */
+    .blurred {
+        filter: blur(6px);
+        pointer-events: none;
+        transition: 0.3s;
     }
 
-    .controls { margin-top: 1em; }
-
-    /* waveform */
-    #waveform {
-      margin: 1.5em auto;
-      width: 90%;
-      height: 80px;
-      cursor: pointer;
+    /* Main Buttons */
+    .main-buttons {
+        text-align: center;
+        margin-top: 50px;
+        transition: opacity 0.3s;
     }
 
-    /* note text */
-    .note {
-      margin-top: 2em;
-      color: var(--muted);
-      font-style: italic;
+    .main-buttons.hidden {
+        opacity: 0;
+        pointer-events: none;
     }
 
-    /* ---------- Top buttons (dark toggle & fx button) ---------- */
-    .toggle {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: #ccc;
-      padding: 0.3em 0.6em;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      z-index: 2100;
-      transition: transform 0.18s;
-    }
-    .toggle:active { transform: scale(0.98); }
-
-    /* Sound Effects button (moved left so fully visible) */
-    #fxToggle {
-      position: fixed;
-      top: 10px;
-      right: 150px; /* shifted left so it's fully visible */
-      background: #ccc;
-      padding: 0.3em 0.6em;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      z-index: 2100;
-      transition: transform 0.18s;
-    }
-    #fxToggle:active { transform: scale(0.98); }
-
-    /* ---------- FX Panel & overlay ---------- */
-    /* overlay that blurs the page when panel is open */
-    #fxOverlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.25);
-      backdrop-filter: blur(4px);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.28s;
-      z-index: 2050;
-    }
-    #fxOverlay.show { opacity: 1; pointer-events: auto; }
-
-    /* panel slides in from right and sits on top */
-    #fxPanel {
-      position: fixed;
-      top: 0;
-      right: -320px; /* hidden */
-      width: 320px;
-      height: 100vh;
-      background: var(--panel-bg);
-      color: var(--text);
-      border-left: 2px solid rgba(0,0,0,0.08);
-      box-shadow: -8px 0 30px rgba(0,0,0,0.12);
-      padding: 16px;
-      transition: right 0.36s cubic-bezier(.2,.9,.3,1), transform 0.36s;
-      z-index: 2099;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      transform: translateZ(0);
-    }
-    #fxPanel.show {
-      right: 0;
+    button {
+        padding: 12px 18px;
+        font-size: 16px;
+        margin: 10px;
+        border-radius: 10px;
+        border: none;
+        background: var(--button);
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.3s, transform 0.2s;
     }
 
-    /* header */
-    .fxHeader {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-    }
-    .fxCloseBtn {
-      background: none;
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-      padding: 6px;
-      border-radius: 6px;
-      transition: background 0.12s;
-    }
-    .fxCloseBtn:hover { background: rgba(0,0,0,0.06); }
-
-    /* inputs inside panel */
-    #fxPanel input[type="file"] { width: 100%; }
-    #fxPanel label { display:block; margin-top:8px; font-weight:600; }
-
-    /* sound buttons */
-    #fxList { margin-top:6px; display:flex; flex-direction:column; gap:6px; }
-    .fxItem {
-      background: #ddd;
-      color: #000;
-      padding: 8px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      text-align: left;
-      transition: transform 0.08s, background 0.12s;
-      user-select: none;
-    }
-    .fxItem:hover { transform: translateY(-2px); background: #ccc; }
-    body.dark .fxItem { background: #333; color: #eee; }
-    body.dark #fxPanel { border-left-color: rgba(255,255,255,0.04); }
-
-    /* responsive tweaks */
-    @media (max-width: 540px) {
-      #fxPanel { width: 100%; right: -100%; }
-      #fxPanel.show { right: 0; }
-      #fxToggle { right: 12px; } /* keep visible */
-      .toggle { right: 72px; }
+    button:hover {
+        transform: scale(1.05);
     }
 
-    /* small visual hint for buttons */
-    button { border-radius:6px; border:1px solid rgba(0,0,0,0.06); background:linear-gradient(#fff,#f6f6f6); cursor:pointer; }
-  </style>
+    /* Sliding SFX Panel */
+    #sfxPanel {
+        position: fixed;
+        top: 0;
+        right: -320px;
+        width: 300px;
+        height: 100vh;
+        background: var(--panel);
+        box-shadow: -4px 0 15px rgba(0,0,0,0.3);
+        padding: 20px;
+        transition: right 0.4s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        z-index: 1000;
+    }
+
+    #sfxPanel.open {
+        right: 0;
+    }
+
+    #closeBtn {
+        align-self: flex-end;
+        cursor: pointer;
+        background: var(--button);
+        padding: 8px 12px;
+        border-radius: 6px;
+    }
+
+    /* Dark mode toggle button */
+    #darkToggle {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 2000;
+    }
+</style>
 </head>
-
 <body>
-  <!-- dark mode toggle -->
-  <div class="toggle" id="darkToggle">Toggle Dark Mode</div>
 
-  <!-- Sound Effects button (shifted left so fully visible) -->
-  <div id="fxToggle">Sound Effects</div>
+<div id="content">
 
-  <!-- overlay (blur + dim) -->
-  <div id="fxOverlay" aria-hidden="true"></div>
-
-  <!-- Sound Effects sliding panel -->
-  <aside id="fxPanel" aria-hidden="true">
-    <div class="fxHeader">
-      <div style="font-size:1.05rem; font-weight:700;">Sound Effects</div>
-      <button id="fxClose" class="fxCloseBtn" aria-label="Close sound effects panel">✕</button>
+    <div class="main-buttons" id="mainUI">
+        <button onclick="playSound()">Play SFX</button>
+        <button onclick="openSFX()">Open SFX Menu</button>
     </div>
 
-    <label for="fxInput">Add audio files</label>
-    <input id="fxInput" type="file" accept="audio/*" multiple />
+</div>
 
-    <label for="fxVolume">SFX Volume</label>
-    <input id="fxVolume" type="range" min="0" max="1" step="0.01" value="1" />
+<button id="darkToggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
 
-    <div style="margin-top:8px; font-weight:600;">Soundboard</div>
-    <div id="fxList" aria-live="polite"></div>
+<!-- SFX Panel -->
+<div id="sfxPanel">
+    <div id="closeBtn" onclick="closeSFX()">Close ✖</div>
 
-    <div style="flex:1"></div>
-    <small style="color:var(--muted);">Sound effects play instantly and do not fade the main player.</small>
-  </aside>
+    <h2>SFX Settings</h2>
 
-  <main>
-    <h2>Waveform Audio Player with Crossfade</h2>
+    <label>Sound Effects Volume</label>
+    <input type="range" id="sfxVolume" min="0" max="1" step="0.01" value="1">
+</div>
 
-    <input type="file" id="fileInput" accept="audio/*" multiple />
-    <select id="trackList"></select>
+<script>
+    let audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 
-    <div class="controls">
-      <button id="playBtn">Play</button>
-      <button id="pauseBtn">Pause</button>
-
-      <div id="volumeControl" style="display:inline-flex; align-items:center; margin-left:1em;">
-        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" />
-        <span id="muteBtn" title="Mute/Unmute" style="margin-left:0.4em; font-size:1.5em; cursor:pointer;">🔊</span>
-      </div>
-
-      <label style="margin-left:1em;">
-        Crossfade (sec):
-        <input type="number" id="fadeDuration" min="0" step="0.1" value="2" style="width:4em;" />
-      </label>
-    </div>
-
-    <div id="waveform"></div>
-
-    <div style="margin-top:12px;">
-      <button id="saveBtn">💾 Save Playlist</button>
-      <button id="loadBtn">📂 Load Playlist</button>
-    </div>
-
-    <div class="note">
-      How it works: Press play/pause for fade. Seek with waveform. Auto fade at end. Controls disabled during final fade.
-    </div>
-  </main>
-
-  <!-- Wavesurfer and main player script -->
-  <script>
-    /* ----------------------
-       Main WaveSurfer Player
-       (unchanged core logic)
-       ---------------------- */
-    const waveform = WaveSurfer.create({
-      container: '#waveform',
-      waveColor: '#999',
-      progressColor: '#2e86de',
-      height: 80,
-      cursorColor: '#333',
-      interact: true
-    });
-
-    const darkToggle = document.getElementById('darkToggle');
-    const fileInput = document.getElementById('fileInput');
-    const trackList = document.getElementById('trackList');
-    const playBtn = document.getElementById('playBtn');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const volumeSlider = document.getElementById('volumeSlider');
-    const muteBtn = document.getElementById('muteBtn');
-    const fadeInput = document.getElementById('fadeDuration');
-    const saveBtn = document.getElementById('saveBtn');
-    const loadBtn = document.getElementById('loadBtn');
-
-    let files = [], isMuted = false, savedVolume = 1, isEnding = false;
-
-    // Dark mode persistence
-    if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark');
-    darkToggle.onclick = () => {
-      document.body.classList.toggle('dark');
-      localStorage.setItem('darkMode', document.body.classList.contains('dark'));
-    };
-
-    // volume/mute restore
-    if (localStorage.getItem('volume')) {
-      savedVolume = parseFloat(localStorage.getItem('volume'));
-      volumeSlider.value = savedVolume;
-    }
-    if (localStorage.getItem('muted')) {
-      isMuted = localStorage.getItem('muted') === 'true';
-    }
-    updateVolume();
-
-    function updateVolume() {
-      waveform.setVolume(isMuted ? 0 : savedVolume);
-      muteBtn.textContent = isMuted ? '🔇' : '🔊';
-      localStorage.setItem('volume', savedVolume);
-      localStorage.setItem('muted', isMuted);
+    function playSound() {
+        audio.volume = document.getElementById("sfxVolume").value;
+        audio.currentTime = 0;
+        audio.play();
     }
 
-    volumeSlider.oninput = () => {
-      savedVolume = parseFloat(volumeSlider.value);
-      isMuted = savedVolume === 0;
-      updateVolume();
-    };
-    muteBtn.onclick = () => {
-      isMuted = !isMuted;
-      updateVolume();
-    };
-
-    // Save playlist names (files must be re-uploaded to play later)
-    saveBtn.onclick = () => {
-      const names = files.map(f => f.name);
-      localStorage.setItem('playlistNames', JSON.stringify(names));
-      alert('Playlist saved. Re-upload files to play.');
-    };
-
-    // Load saved playlist names (disabled entries — re-upload needed)
-    loadBtn.onclick = () => {
-      const names = JSON.parse(localStorage.getItem('playlistNames') || '[]');
-      if (!names.length) return alert('No playlist found.');
-      files = [];
-      trackList.innerHTML = '';
-      names.forEach(name => {
-        const opt = document.createElement('option');
-        opt.textContent = name + ' (re-upload needed)';
-        opt.disabled = true;
-        trackList.appendChild(opt);
-      });
-    };
-
-    // Load files into playlist
-    fileInput.onchange = e => {
-      files = [...e.target.files];
-      trackList.innerHTML = '';
-      files.forEach((f, i) => {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = f.name;
-        trackList.appendChild(opt);
-      });
-      if (files.length) loadTrack(0);
-    };
-
-    trackList.onchange = () => {
-      const i = parseInt(trackList.value);
-      if (!isNaN(i)) loadTrack(i);
-    };
-
-    function loadTrack(index) {
-      const file = files[index];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      waveform.load(url);
-      trackList.value = index;
+    function openSFX() {
+        document.getElementById("sfxPanel").classList.add("open");
+        document.getElementById("mainUI").classList.add("hidden");
+        document.getElementById("content").classList.add("blurred");
     }
 
-    // Fade utility
-    function fade(from, to, duration) {
-      return new Promise(resolve => {
-        const steps = 30;
-        let current = 0;
-        const stepTime = (duration * 1000) / steps;
-        const step = () => {
-          current++;
-          let v = from + ((to - from) * current / steps);
-          waveform.setVolume(isMuted ? 0 : v);
-          if (current < steps) setTimeout(step, stepTime);
-          else resolve();
-        };
-        step();
-      });
+    function closeSFX() {
+        document.getElementById("sfxPanel").classList.remove("open");
+        document.getElementById("mainUI").classList.remove("hidden");
+        document.getElementById("content").classList.remove("blurred");
     }
 
-    // Play with fade-in
-    playBtn.onclick = async () => {
-      if (isEnding) return;
-      const dur = parseFloat(fadeInput.value) || 0;
-      waveform.setVolume(0);
-      waveform.play();
-      await fade(0, isMuted ? 0 : savedVolume, dur);
-    };
-
-    // Pause with fade-out
-    pauseBtn.onclick = async () => {
-      if (isEnding) return;
-      const dur = parseFloat(fadeInput.value) || 0;
-      await fade(isMuted ? 0 : savedVolume, 0, dur);
-      waveform.pause();
-    };
-
-    // Auto fade at end (disable controls while fading)
-    waveform.on('audioprocess', () => {
-      const timeLeft = waveform.getDuration() - waveform.getCurrentTime();
-      const fadeDur = parseFloat(fadeInput.value) || 2;
-      if (!isEnding && timeLeft <= fadeDur) {
-        isEnding = true;
-        playBtn.disabled = true;
-        pauseBtn.disabled = true;
-        fade(savedVolume, 0, timeLeft).then(() => {
-          waveform.pause();
-          playBtn.disabled = false;
-          pauseBtn.disabled = false;
-          isEnding = false;
-        });
-      }
-    });
-  </script>
-
-  <!-- -----------------------------
-       Sound Effects: panel, close,
-       blur overlay, working SFX volume
-       ----------------------------- -->
-  <script>
-    /* Elements */
-    const fxToggle = document.getElementById('fxToggle');
-    const fxPanel = document.getElementById('fxPanel');
-    const fxClose = document.getElementById('fxClose');
-    const fxInput = document.getElementById('fxInput');
-    const fxList = document.getElementById('fxList');
-    const fxVolumeSlider = document.getElementById('fxVolume');
-    const fxOverlay = document.getElementById('fxOverlay');
-
-    /* State */
-    let fxVolume = 1;
-    // store { name, url, audio } objects
-    let fxSounds = [];
-
-    /* Open panel */
-    function openFxPanel() {
-      fxPanel.classList.add('show');
-      fxOverlay.classList.add('show');
-      fxPanel.setAttribute('aria-hidden', 'false');
-      fxOverlay.setAttribute('aria-hidden', 'false');
-      // subtle animation: small slide in scale
-      fxPanel.style.transform = 'translateX(0)';
+    function toggleDarkMode() {
+        document.body.classList.toggle("dark");
     }
+</script>
 
-    /* Close panel */
-    function closeFxPanel() {
-      fxPanel.classList.remove('show');
-      fxOverlay.classList.remove('show');
-      fxPanel.setAttribute('aria-hidden', 'true');
-      fxOverlay.setAttribute('aria-hidden', 'true');
-    }
-
-    fxToggle.addEventListener('click', () => {
-      // toggle
-      if (fxPanel.classList.contains('show')) closeFxPanel();
-      else openFxPanel();
-    });
-
-    fxOverlay.addEventListener('click', () => {
-      closeFxPanel();
-    });
-
-    if (fxClose) {
-      fxClose.addEventListener('click', () => {
-        closeFxPanel();
-      });
-    }
-
-    /* Load SFX files */
-    fxInput.addEventListener('change', (e) => {
-      const items = [...e.target.files];
-      items.forEach(file => {
-        const url = URL.createObjectURL(file);
-        const audio = new Audio(url);
-        audio.volume = fxVolume;
-
-        const sfx = { name: file.name, url, audio };
-        fxSounds.push(sfx);
-
-        const btn = document.createElement('div');
-        btn.className = 'fxItem';
-        btn.textContent = file.name;
-
-        btn.addEventListener('click', () => {
-          // reuse same audio object for each effect
-          sfx.audio.currentTime = 0;
-          sfx.audio.volume = fxVolume;
-          sfx.audio.play();
-        });
-
-        fxList.appendChild(btn);
-      });
-
-      // reset input so same file can be uploaded again if needed
-      fxInput.value = '';
-    });
-
-    /* FX volume slider */
-    fxVolumeSlider.addEventListener('input', (e) => {
-      fxVolume = parseFloat(e.target.value);
-      fxSounds.forEach(s => { s.audio.volume = fxVolume; });
-    });
-
-    /* Accessibility: close panel with Escape */
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (fxPanel.classList.contains('show')) closeFxPanel();
-      }
-    });
-  </script>
 </body>
 </html>
