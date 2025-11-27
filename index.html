@@ -27,7 +27,22 @@
       height: 80px;
       cursor: pointer;
     }
+
+    /* Moved left so the full button is visible */
     .toggle {
+      position: fixed;
+      top: 10px;
+      right: 80px;
+      background: #ccc;
+      padding: 0.3em 0.6em;
+      border-radius: 5px;
+      cursor: pointer;
+      user-select: none;
+      z-index: 999;
+    }
+
+    /* Sound FX Button */
+    .fxBtn {
       position: fixed;
       top: 10px;
       right: 10px;
@@ -36,55 +51,24 @@
       border-radius: 5px;
       cursor: pointer;
       user-select: none;
-      z-index: 20;
+      z-index: 999;
     }
 
-    /* --- NEW SOUND EFFECTS PANEL --- */
-    #sfxToggle {
-      position: fixed;
-      top: 10px;
-      right: 130px;
-      background: #ccc;
-      padding: 0.3em 0.6em;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      z-index: 20;
-    }
-
-    #sfxPanel {
+    /* Slide-out FX panel */
+    #fxPanel {
       position: fixed;
       top: 50px;
-      right: -260px;
-      width: 240px;
-      background: #f4f4f4;
-      border-left: 2px solid #aaa;
+      right: -320px;
+      width: 300px;
+      background: #ddd;
       padding: 1em;
-      height: 300px;
-      overflow-y: auto;
+      border-radius: 10px 0 0 10px;
+      box-shadow: -3px 0 8px rgba(0,0,0,0.25);
       transition: right 0.3s;
-      z-index: 30;
+      z-index: 998;
     }
-    body.dark #sfxPanel {
-      background: #222;
-      color: #fff;
-      border-left-color: #555;
-    }
-    #sfxPanel.open {
+    #fxPanel.show {
       right: 0;
-    }
-    .sfxButton {
-      width: 100%;
-      padding: 0.6em;
-      margin-top: 0.4em;
-      border: none;
-      background: #2e86de;
-      color: white;
-      cursor: pointer;
-      border-radius: 4px;
-    }
-    .sfxButton:hover {
-      background: #1d5fa3;
     }
 
     .controls {
@@ -105,22 +89,37 @@
       color: gray;
       font-style: italic;
     }
+
+    /* Each sound effect button */
+    .fxItem {
+      width: 100%;
+      margin: 0.3em 0;
+      padding: 0.4em;
+      background: #bbb;
+      border-radius: 6px;
+      cursor: pointer;
+    }
   </style>
   <script src="https://unpkg.com/wavesurfer.js"></script>
 </head>
 <body>
-
-  <!-- NEW SOUND EFFECTS BUTTON -->
-  <div id="sfxToggle">Sound Effects</div>
-
-  <!-- NEW SOUND EFFECTS PANEL -->
-  <div id="sfxPanel">
-    <h3>Sound Board</h3>
-    <input type="file" id="sfxInput" accept="audio/*" multiple />
-    <div id="sfxButtons"></div>
-  </div>
-
   <div class="toggle" id="darkToggle">Toggle Dark Mode</div>
+
+  <!-- SOUND EFFECTS BUTTON -->
+  <div class="fxBtn" id="fxToggle">Sound Effects</div>
+
+  <!-- SOUND EFFECTS PANEL -->
+  <div id="fxPanel">
+    <h3>Sound Effects</h3>
+    <input type="file" id="fxInput" accept="audio/*" multiple />
+
+    <!-- SFX volume slider -->
+    <label>Volume:
+      <input type="range" id="fxVolume" min="0" max="1" step="0.01" value="1">
+    </label>
+
+    <div id="fxList"></div>
+  </div>
 
   <h2>Waveform Audio Player with Crossfade</h2>
 
@@ -170,50 +169,58 @@
     const saveBtn = document.getElementById('saveBtn');
     const loadBtn = document.getElementById('loadBtn');
 
+    /* SOUND EFFECTS ELEMENTS */
+    const fxToggle = document.getElementById('fxToggle');
+    const fxPanel = document.getElementById('fxPanel');
+    const fxInput = document.getElementById('fxInput');
+    const fxList = document.getElementById('fxList');
+    const fxVolumeSlider = document.getElementById('fxVolume');
+
+    let fxVolume = 1;
     let files = [], isMuted = false, savedVolume = 1, isEnding = false;
+    let fxBuffers = [];
 
-    /* -----------------------------
-       NEW SOUND EFFECTS SYSTEM
-    ------------------------------ */
-    const sfxToggle = document.getElementById("sfxToggle");
-    const sfxPanel = document.getElementById("sfxPanel");
-    const sfxInput = document.getElementById("sfxInput");
-    const sfxButtons = document.getElementById("sfxButtons");
-
-    sfxToggle.onclick = () => {
-      sfxPanel.classList.toggle("open");
+    /* TOGGLE FX PANEL */
+    fxToggle.onclick = () => {
+      fxPanel.classList.toggle('show');
     };
 
-    sfxInput.onchange = e => {
-      const list = [...e.target.files];
-      list.forEach(file => {
+    /* LOAD SOUND EFFECTS */
+    fxInput.onchange = e => {
+      const items = [...e.target.files];
+      items.forEach(file => {
         const url = URL.createObjectURL(file);
-
-        const btn = document.createElement("button");
-        btn.className = "sfxButton";
-        btn.textContent = file.name;
-
         const audio = new Audio(url);
+        audio.volume = fxVolume;
 
+        fxBuffers.push(audio);
+
+        const btn = document.createElement('div');
+        btn.className = 'fxItem';
+        btn.textContent = file.name;
         btn.onclick = () => {
-          audio.currentTime = 0;
-          audio.play(); // no fade, instant play
+          const sound = new Audio(url);
+          sound.volume = fxVolume;
+          sound.play();
         };
 
-        sfxButtons.appendChild(btn);
+        fxList.appendChild(btn);
       });
     };
 
-    /* -----------------------------
-       ORIGINAL CODE BELOW (unchanged)
-    ------------------------------ */
+    /* FX VOLUME */
+    fxVolumeSlider.oninput = () => {
+      fxVolume = parseFloat(fxVolumeSlider.value);
+    };
 
+    /* Dark mode */
     if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark');
     darkToggle.onclick = () => {
       document.body.classList.toggle('dark');
       localStorage.setItem('darkMode', document.body.classList.contains('dark'));
     };
 
+    /* Load volume/mute */
     if (localStorage.getItem('volume')) {
       savedVolume = parseFloat(localStorage.getItem('volume'));
       volumeSlider.value = savedVolume;
@@ -223,6 +230,7 @@
     }
     updateVolume();
 
+    /* Playlist save/load */
     saveBtn.onclick = () => {
       const names = files.map(f => f.name);
       localStorage.setItem('playlistNames', JSON.stringify(names));
@@ -242,6 +250,7 @@
       });
     };
 
+    /* Volume control */
     volumeSlider.oninput = () => {
       savedVolume = parseFloat(volumeSlider.value);
       isMuted = savedVolume === 0;
@@ -260,6 +269,7 @@
       localStorage.setItem('muted', isMuted);
     }
 
+    /* Load main audio */
     fileInput.onchange = e => {
       files = [...e.target.files];
       trackList.innerHTML = '';
@@ -285,6 +295,7 @@
       trackList.value = index;
     }
 
+    /* Crossfade */
     function fade(from, to, duration) {
       return new Promise(resolve => {
         const steps = 30;
@@ -301,6 +312,7 @@
       });
     }
 
+    /* Faded Play */
     playBtn.onclick = async () => {
       if (isEnding) return;
       const dur = parseFloat(fadeInput.value) || 0;
@@ -309,6 +321,7 @@
       await fade(0, isMuted ? 0 : savedVolume, dur);
     };
 
+    /* Faded Pause */
     pauseBtn.onclick = async () => {
       if (isEnding) return;
       const dur = parseFloat(fadeInput.value) || 0;
@@ -316,6 +329,7 @@
       waveform.pause();
     };
 
+    /* Auto fade */
     waveform.on('audioprocess', () => {
       const timeLeft = waveform.getDuration() - waveform.getCurrentTime();
       if (!isEnding && timeLeft <= (parseFloat(fadeInput.value) || 2)) {
