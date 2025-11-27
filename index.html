@@ -2,155 +2,221 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SFX Menu System</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Full Audio Player + SFX Panel</title>
+<script src="https://unpkg.com/wavesurfer.js"></script>
 <style>
-    :root {
-        --bg: #ffffff;
-        --text: #000000;
-        --panel: #f2f2f2;
-        --button: #e5e5e5;
-        --blur: rgba(0,0,0,0.4);
-    }
+  :root {
+    --bg:#fff; --text:#000; --panel:#f0f0f0; --accent:#2e86de; --muted:gray;
+  }
+  body.dark { --bg:#121212; --text:#eee; --panel:#1e1e1e; --accent:#4aa3ff; --muted:#999;}
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:var(--text); transition:0.3s; }
+  main.app { max-width:980px; margin:20px auto; padding:20px; }
+  header h1{margin:0 0 8px 0;font-size:1.2rem;}
 
-    body.dark {
-        --bg: #121212;
-        --text: #ffffff;
-        --panel: #1f1f1f;
-        --button: #2c2c2c;
-        --blur: rgba(255,255,255,0.2);
-    }
+  /* Top right buttons */
+  .top-right { position:fixed; top:10px; right:10px; display:flex; gap:10px; z-index:2200; align-items:center;}
+  .btn { padding:6px 10px; border-radius:6px; border:1px solid rgba(0,0,0,0.06); background:#eee; cursor:pointer; font-size:14px;}
+  .btn:active { transform:translateY(1px);}
+  #fxToggle { right:140px; }
 
-    body {
-        font-family: Arial, sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        margin: 0;
-        transition: background 0.3s, color 0.3s;
-    }
+  /* Overlay blur */
+  #fxOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.18); backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:0.3s; z-index:2080;}
+  #fxOverlay.show { opacity:1; pointer-events:auto; }
 
-    /* Blur effect */
-    .blurred {
-        filter: blur(6px);
-        pointer-events: none;
-        transition: 0.3s;
-    }
+  /* Sliding FX panel */
+  #fxPanel { position:fixed; top:0; right:-340px; width:340px; height:100vh; background:var(--panel); color:var(--text); box-shadow:-8px 0 36px rgba(0,0,0,0.12); transition:right 0.36s; z-index:2090; padding:14px; display:flex; flex-direction:column; gap:10px; overflow:auto;}
+  #fxPanel.show { right:0;}
+  .fxHeader { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .fxCloseBtn { background:none; border:none; font-size:18px; cursor:pointer; padding:6px; border-radius:6px;}
+  .fxCloseBtn:hover { background: rgba(0,0,0,0.04);}
+  .fxItem { padding:10px 12px; border-radius:8px; background:#e3e3e3; cursor:pointer; text-align:left; margin-bottom:4px; }
+  body.dark .fxItem { background:#2a2a2a; color:var(--text);}
+  .fxItem:hover { transform:translateY(-2px); background:#d3d3d3; }
 
-    /* Main Buttons */
-    .main-buttons {
-        text-align: center;
-        margin-top: 50px;
-        transition: opacity 0.3s;
-    }
+  /* main player area */
+  #mainArea { transition: opacity 0.28s, filter 0.28s; }
+  #mainArea.hidden { opacity:0.04; pointer-events:none; filter:blur(3px) grayscale(0.1); }
 
-    .main-buttons.hidden {
-        opacity: 0;
-        pointer-events: none;
-    }
-
-    button {
-        padding: 12px 18px;
-        font-size: 16px;
-        margin: 10px;
-        border-radius: 10px;
-        border: none;
-        background: var(--button);
-        color: var(--text);
-        cursor: pointer;
-        transition: background 0.3s, transform 0.2s;
-    }
-
-    button:hover {
-        transform: scale(1.05);
-    }
-
-    /* Sliding SFX Panel */
-    #sfxPanel {
-        position: fixed;
-        top: 0;
-        right: -320px;
-        width: 300px;
-        height: 100vh;
-        background: var(--panel);
-        box-shadow: -4px 0 15px rgba(0,0,0,0.3);
-        padding: 20px;
-        transition: right 0.4s ease;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        z-index: 1000;
-    }
-
-    #sfxPanel.open {
-        right: 0;
-    }
-
-    #closeBtn {
-        align-self: flex-end;
-        cursor: pointer;
-        background: var(--button);
-        padding: 8px 12px;
-        border-radius: 6px;
-    }
-
-    /* Dark mode toggle button */
-    #darkToggle {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 2000;
-    }
+  .controls { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  input[type=file]{padding:6px;} select{padding:6px; min-width:180px;}
+  #waveform{margin:20px auto; width:90%; height:90px; cursor:pointer;}
+  .note{margin-top:14px; color:var(--muted); font-style:italic;}
+  #playlist{margin-top:12px; max-height:200px; overflow:auto; border-radius:8px; border:1px solid rgba(0,0,0,0.04); padding:6px;}
+  #playlist li{padding:8px; cursor:pointer; border-bottom:1px solid rgba(0,0,0,0.04);}
+  #playlist li.active{background: rgba(46,134,222,0.08); color:var(--accent); font-weight:600;}
 </style>
 </head>
 <body>
+  <!-- overlay for blur/dim -->
+  <div id="fxOverlay" aria-hidden="true"></div>
 
-<div id="content">
+  <!-- top buttons -->
+  <div class="top-right">
+    <div id="fxToggle" class="btn">Sound Effects</div>
+    <div id="darkToggle" class="btn">Toggle Dark</div>
+  </div>
 
-    <div class="main-buttons" id="mainUI">
-        <button onclick="playSound()">Play SFX</button>
-        <button onclick="openSFX()">Open SFX Menu</button>
+  <!-- sliding FX panel -->
+  <aside id="fxPanel" aria-hidden="true">
+    <div class="fxHeader">
+      <div style="font-weight:700">Sound Effects</div>
+      <button id="fxClose" class="fxCloseBtn">✕</button>
     </div>
+    <label>Add audio files</label>
+    <input id="fxInput" type="file" accept="audio/*" multiple>
+    <label>SFX Volume</label>
+    <input id="fxVolume" type="range" min="0" max="1" step="0.01" value="1">
+    <div style="font-weight:700; margin-top:6px">Soundboard</div>
+    <div id="fxList"></div>
+    <div style="flex:1"></div>
+    <small style="color:gray">Sound effects play instantly, do not fade main player.</small>
+  </aside>
 
-</div>
+  <main class="app" id="mainArea">
+    <header><h1>Waveform Audio Player with Crossfade</h1></header>
 
-<button id="darkToggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <section>
+      <input id="fileInput" type="file" accept="audio/*" multiple>
+      <select id="trackList"></select>
 
-<!-- SFX Panel -->
-<div id="sfxPanel">
-    <div id="closeBtn" onclick="closeSFX()">Close ✖</div>
+      <div class="controls">
+        <button id="playBtn">Play</button>
+        <button id="pauseBtn">Pause</button>
+        <div style="display:inline-flex; align-items:center; gap:8px;">
+          <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1">
+          <span id="muteBtn" style="font-size:20px; cursor:pointer;">🔊</span>
+        </div>
+        <label style="display:inline-flex; align-items:center; gap:8px;">
+          Crossfade (sec):
+          <input id="fadeDuration" type="number" min="0" step="0.1" value="2" style="width:4em; padding:6px;">
+        </label>
+        <button id="saveBtn">💾 Save Playlist</button>
+        <button id="loadBtn">📂 Load Playlist</button>
+      </div>
+    </section>
 
-    <h2>SFX Settings</h2>
+    <div id="waveform"></div>
+    <ul id="playlist"></ul>
 
-    <label>Sound Effects Volume</label>
-    <input type="range" id="sfxVolume" min="0" max="1" step="0.01" value="1">
-</div>
+    <div class="note">
+      How it works: Press play/pause for fade. Seek with waveform. Auto fade at end. Controls disabled during final fade.
+    </div>
+  </main>
 
 <script>
-    let audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+  /***** MAIN PLAYER *****/
+  const waveform = WaveSurfer.create({
+    container:'#waveform',
+    waveColor:'#999',
+    progressColor:'#2e86de',
+    height:90,
+    cursorColor:'#333',
+    interact:true
+  });
 
-    function playSound() {
-        audio.volume = document.getElementById("sfxVolume").value;
-        audio.currentTime = 0;
-        audio.play();
-    }
+  // Elements
+  const fxToggle = document.getElementById('fxToggle'), fxPanel=document.getElementById('fxPanel'),
+        fxClose=document.getElementById('fxClose'), fxInput=document.getElementById('fxInput'),
+        fxList=document.getElementById('fxList'), fxVolumeSlider=document.getElementById('fxVolume'),
+        fxOverlay=document.getElementById('fxOverlay');
 
-    function openSFX() {
-        document.getElementById("sfxPanel").classList.add("open");
-        document.getElementById("mainUI").classList.add("hidden");
-        document.getElementById("content").classList.add("blurred");
-    }
+  const darkToggle=document.getElementById('darkToggle'), fileInput=document.getElementById('fileInput'),
+        trackList=document.getElementById('trackList'), playBtn=document.getElementById('playBtn'),
+        pauseBtn=document.getElementById('pauseBtn'), volumeSlider=document.getElementById('volumeSlider'),
+        muteBtn=document.getElementById('muteBtn'), fadeInput=document.getElementById('fadeDuration'),
+        saveBtn=document.getElementById('saveBtn'), loadBtn=document.getElementById('loadBtn'),
+        playlistEl=document.getElementById('playlist'), mainArea=document.getElementById('mainArea');
 
-    function closeSFX() {
-        document.getElementById("sfxPanel").classList.remove("open");
-        document.getElementById("mainUI").classList.remove("hidden");
-        document.getElementById("content").classList.remove("blurred");
-    }
+  let files=[], isMuted=false, savedVolume=1, isEnding=false;
+  let fxVolume=parseFloat(fxVolumeSlider.value)||1, fxSounds=[];
 
-    function toggleDarkMode() {
-        document.body.classList.toggle("dark");
-    }
+  /***** DARK MODE *****/
+  if(localStorage.getItem('darkMode')==='true') document.body.classList.add('dark');
+  darkToggle.onclick=()=>{const v=document.body.classList.toggle('dark'); localStorage.setItem('darkMode',v?'true':'false');};
+
+  /***** VOLUME / MUTE *****/
+  if(localStorage.getItem('volume')) savedVolume=parseFloat(localStorage.getItem('volume'));
+  if(localStorage.getItem('muted')) isMuted=localStorage.getItem('muted')==='true';
+  function updateVolume(){ waveform.setVolume(isMuted?0:savedVolume); muteBtn.textContent=isMuted?'🔇':'🔊'; localStorage.setItem('volume',savedVolume); localStorage.setItem('muted',isMuted); }
+  volumeSlider.oninput=e=>{savedVolume=parseFloat(e.target.value); isMuted=savedVolume===0; updateVolume();}
+  muteBtn.onclick=()=>{isMuted=!isMuted; updateVolume();}
+  updateVolume();
+
+  /***** PLAYLIST *****/
+  saveBtn.onclick=()=>{
+    const names=files.map(f=>f.name);
+    localStorage.setItem('playlistNames',JSON.stringify(names));
+    alert('Playlist saved. Re-upload to play.');
+  };
+  loadBtn.onclick=()=>{
+    const names=JSON.parse(localStorage.getItem('playlistNames')||'[]'); if(!names.length){alert('No playlist');return;}
+    files=[]; trackList.innerHTML=''; playlistEl.innerHTML='';
+    names.forEach(name=>{
+      const opt=document.createElement('option'); opt.textContent=name+' (re-upload)'; opt.disabled=true; trackList.appendChild(opt);
+      const li=document.createElement('li'); li.textContent=name+' (re-upload)'; playlistEl.appendChild(li);
+    });
+  };
+
+  /***** FILE LOAD *****/
+  fileInput.onchange=e=>{
+    files=[...e.target.files];
+    renderTracks(); if(files.length) loadTrack(0);
+  };
+  function renderTracks(){
+    trackList.innerHTML=''; playlistEl.innerHTML='';
+    files.forEach((f,i)=>{
+      const opt=document.createElement('option'); opt.value=i; opt.textContent=f.name; trackList.appendChild(opt);
+      const li=document.createElement('li'); li.textContent=f.name; li.dataset.index=i; li.onclick=()=>loadTrack(i); playlistEl.appendChild(li);
+    });
+  }
+  trackList.onchange=()=>{const i=parseInt(trackList.value); if(!isNaN(i)) loadTrack(i);}
+  function highlightActive(i){document.querySelectorAll('#playlist li').forEach(el=>el.classList.toggle('active',parseInt(el.dataset.index)===i)); trackList.value=i;}
+  function loadTrack(index){const file=files[index]; if(!file) return; waveform.load(URL.createObjectURL(file)); highlightActive(index);}
+
+  /***** FADE UTILITY *****/
+  function fade(from,to,dur){return new Promise(resolve=>{const steps=30; let c=0; const stepTime=(dur*1000)/steps; const step=()=>{c++; let v=from+((to-from)*c/steps); waveform.setVolume(isMuted?0:v); if(c<steps) setTimeout(step,stepTime); else resolve();}; step();});}
+
+  /***** PLAY/PAUSE *****/
+  playBtn.onclick=async()=>{
+    if(isEnding) return;
+    const dur=parseFloat(fadeInput.value)||0;
+    waveform.setVolume(0); waveform.play();
+    await fade(0,isMuted?0:savedVolume,dur);
+  };
+  pauseBtn.onclick=async()=>{
+    if(isEnding) return;
+    const dur=parseFloat(fadeInput.value)||0;
+    await fade(isMuted?0:savedVolume,0,dur); waveform.pause();
+  };
+
+  /***** AUTO FADE END *****/
+  waveform.on('audioprocess',()=>{
+    const duration=waveform.getDuration()||0, current=waveform.getCurrentTime()||0, remaining=duration-current, fadeDur=parseFloat(fadeInput.value)||2;
+    if(!isEnding && duration>0 && remaining<=fadeDur){ isEnding=true; playBtn.disabled=true; pauseBtn.disabled=true;
+      fade(savedVolume,0,remaining).then(()=>{ waveform.pause(); playBtn.disabled=false; pauseBtn.disabled=false; isEnding=false; }); }
+  });
+
+  /***** FX PANEL *****/
+  function openFxPanel(){ fxPanel.classList.add('show'); fxOverlay.classList.add('show'); fxPanel.setAttribute('aria-hidden','false'); fxOverlay.setAttribute('aria-hidden','false'); mainArea.classList.add('hidden'); }
+  function closeFxPanel(){ fxPanel.classList.remove('show'); fxOverlay.classList.remove('show'); fxPanel.setAttribute('aria-hidden','true'); fxOverlay.setAttribute('aria-hidden','true'); mainArea.classList.remove('hidden'); }
+  fxToggle.onclick=()=>{ fxPanel.classList.contains('show')?closeFxPanel():openFxPanel(); };
+  fxClose.onclick=closeFxPanel; fxOverlay.onclick=closeFxPanel;
+  document.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && fxPanel.classList.contains('show')) closeFxPanel(); });
+
+  /***** FX: load files, create buttons, volume *****/
+  fxInput.addEventListener('change',e=>{
+    const items=Array.from(e.target.files||[]);
+    items.forEach(file=>{
+      const url=URL.createObjectURL(file); const audio=new Audio(url); audio.volume=fxVolume;
+      const obj={name:file.name,url,audio}; fxSounds.push(obj);
+      const btn=document.createElement('div'); btn.className='fxItem'; btn.textContent=file.name;
+      btn.onclick=()=>{ obj.audio.currentTime=0; obj.audio.volume=fxVolume; obj.audio.play(); };
+      fxList.appendChild(btn); obj.btn=btn;
+    });
+    fxInput.value='';
+  });
+  fxVolumeSlider.addEventListener('input',e=>{ fxVolume=parseFloat(e.target.value); fxSounds.forEach(s=>s.audio.volume=fxVolume); });
 </script>
-
 </body>
 </html>
